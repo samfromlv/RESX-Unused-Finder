@@ -49,5 +49,6 @@ namespace ResxUnusedFinder
             this.keyColumn.Width = Settings.Default.KeyColumnWidth;
             this.valueColumn.Width = Settings.Default.ValueColumnWidth;
         }
+
     }
 }

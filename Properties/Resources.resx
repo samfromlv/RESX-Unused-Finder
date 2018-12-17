@@ -126,4 +126,7 @@
   <data name="ExcludedPrefixesToolTip" xml:space="preserve">
     <value>A comma-separated list of key prefixes to exclude. If you construct resource keys on-the-fly you might have some that don't get directly referenced by the code. Any keys that have one of the given prefixes will be considered 'used'.</value>
   </data>
+  <data name="ExtensionsExcludeToolTip" xml:space="preserve">
+    <value>Regex to exclude files from search. Full path is passed to regex to find match.</value>
+  </data>
 </root>

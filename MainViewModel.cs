@@ -26,8 +26,9 @@ namespace ResxUnusedFinder
         private HashSet<string> resourceKeys;
         private List<string> files;
         private List<string> extensionList;
+        private Regex fileExcludeRegex;
         private List<string> referenceFormatList;
-        private List<string> excludePrefixesList;
+        private Regex excludePrefixRegex;
         private Dictionary<string, Regex> regexCache;
 
         public MainViewModel()
@@ -114,6 +115,12 @@ namespace ResxUnusedFinder
             set { this.Set(ref this.extensions, value); }
         }
 
+        private string extensionsExcludeRegex;
+        public string ExtensionsExcludeRegex
+        {
+            get { return this.extensionsExcludeRegex; }
+            set { this.Set(ref this.extensionsExcludeRegex, value); }
+        }
         public ObservableCollection<ReferenceFormatViewModel> ReferenceFormats { get; }
 
         private string excludePrefixes;
@@ -297,6 +304,28 @@ namespace ResxUnusedFinder
             }
         }
 
+        private RelayCommand copySelectedCommand;
+        public RelayCommand CopySelectedCommand
+        {
+            get
+            {
+                return this.copySelectedCommand ?? (this.copySelectedCommand = new RelayCommand(
+                    () =>
+                    {
+                        var items = this.UnusedResources.Where(r => r.IsSelected).Select(r => r.Key).Distinct().ToList();
+                        string clipboardText = string.Join(Environment.NewLine, items);
+                        if (ClipboardService.SetText(clipboardText))
+                        {
+                            MessageBox.Show("Copied " + items.Count + " key(s) to the clipboard.");
+                        }
+                    },
+                    () =>
+                    {
+                        return !this.Working && this.UnusedResources != null && this.UnusedResources.Count > 0;
+                    }));
+            }
+        }
+
         private RelayCommand deleteSelectedCommand;
         public RelayCommand DeleteSelectedCommand
         {
@@ -407,9 +436,15 @@ namespace ResxUnusedFinder
             this.Status = "Populating search list...";
 
             this.resourceKeys = new HashSet<string>();
-            this.excludePrefixesList = this.ExcludePrefixes == null ? 
-                new List<string>() :
-                this.ExcludePrefixes.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToList();
+
+            if (!String.IsNullOrWhiteSpace(this.ExcludePrefixes))
+            {
+                excludePrefixRegex = GetRegex(this.ExcludePrefixes);
+            }
+            else
+            {
+                excludePrefixRegex = null;
+            }
 
             this.resourceDocument = XDocument.Load(this.ResourceFile);
 
@@ -418,15 +453,10 @@ namespace ResxUnusedFinder
                 string name = GetName(dataElement);
 
                 bool addName = true;
-                foreach (string excludedPrefix in this.excludePrefixesList)
+                if (excludePrefixRegex?.IsMatch(name) == true)
                 {
-                    if (name.StartsWith(excludedPrefix))
-                    {
-                        addName = false;
-                        break;
-                    }
+                    addName = false;
                 }
-
                 if (addName)
                 {
                     this.resourceKeys.Add(name);
@@ -509,7 +539,11 @@ namespace ResxUnusedFinder
 
             this.extensionList = this.Extensions.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(e => CleanExtension(e.Trim())).ToList();
             this.files = new List<string>();
-
+            this.fileExcludeRegex = null;
+            if (!String.IsNullOrWhiteSpace(this.ExtensionsExcludeRegex))
+            {
+                fileExcludeRegex = new Regex(this.ExtensionsExcludeRegex);
+            }
             try
             {
                 this.PopulateFileList(this.ProjectFolder);
@@ -540,7 +574,7 @@ namespace ResxUnusedFinder
             {
                 foreach (string extension in this.extensionList)
                 {
-                    if (file.EndsWith(extension))
+                    if (file.EndsWith(extension) && (fileExcludeRegex == null || !fileExcludeRegex.IsMatch(file)))
                     {
                         this.files.Add(file);
                         break;
@@ -569,12 +603,7 @@ namespace ResxUnusedFinder
                     bool fileHasMatch;
                     if (this.UseRegex)
                     {
-                        Regex regex;
-                        if (!this.regexCache.TryGetValue(searchString, out regex))
-                        {
-                            regex = new Regex(searchString);
-                            this.regexCache.Add(searchString, regex);
-                        }
+                        Regex regex = GetRegex(searchString);
 
                         fileHasMatch = regex.IsMatch(fileText);
                     }
@@ -595,6 +624,18 @@ namespace ResxUnusedFinder
             {
                 this.resourceKeys.Remove(key);
             }
+        }
+
+        private Regex GetRegex(string pattern)
+        {
+            Regex regex;
+            if (!this.regexCache.TryGetValue(pattern, out regex))
+            {
+                regex = new Regex(pattern);
+                this.regexCache.Add(pattern, regex);
+            }
+
+            return regex;
         }
 
         private void Delete(HashSet<string> stringsToDelete)
